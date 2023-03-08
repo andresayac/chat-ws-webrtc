@@ -7,229 +7,56 @@ let answerBtn = $('#answerBtn');
 let declineBtn = $('#declineBtn');
 let alertBox = $('#alertBox');
 
-
-let pc;
+let rtcPeerConnection;
 let sendTo = callBtn.data('user')
 let localStream;
+let remoteStream;
+
+let isCreator;
 
 //video elements
 const localVideo = document.querySelector("#localVideo");
 const remoteVideo = document.querySelector("#remoteVideo");
 
 //media Info
-const mediaConst = {
-    video: true,
-    audio: true
-};
 
-// //Info about stun Servers
-const config = {
-    'iceServers': [
-        // { 'urls': 'stun:stun.l.google.com:19302' },
-        { 'urls': 'stun:stun.octopus-latam.com:3478' },
+const rtcConfig = {
+    iceServers: [
         {
-            "urls": "turn:turn.octopus-latam.com:3478",
-            "username": "octopus",
-            "credential": "octopus",
+            urls: 'stun:stun1.l.google.com:19302',
+        },
+        {
+            urls: "turn:turn.octopus-latam.com:3478",
+            username: "octopus",
+            credential: "octopus",
         }
     ],
-}
+};
 
-// // ,
-// //      
-
-
-//Info about stun Servers
-
-// const config = { iceServers: [{ url: 'stun:stun.l.google.com:19302' }] };
-const preferences = { optional: [{ googCpuOveruseDetection: true }, { RtpDataChannels: false }] }
-
-
-//What to receive from other client
-const options = {
-    offerToReceiveVideo: 1,
-    offerToReceiveAudio: 1
-}
-
-
-function getConn() {
-    if (!pc) {
-        pc = new RTCPeerConnection(config, preferences);
-    }
-}
-
-//ask for media input
-async function getCam() {
-    let mediaStream;
-    try {
-        if (!pc) {
-            await getConn();
-        }
-        mediaStream = await navigator.mediaDevices.getUserMedia(mediaConst);
-
-        localStream = mediaStream;
-
-        if (mediaStream.getVideoTracks().length > 0) {
-            localVideo.srcObject = mediaStream;
-        }
-
-        pc.addStream(localStream);
-
-    } catch (error) {
-        console.log(error);
-    }
-}
-
-async function createOffer(sendTo) {
-    await sendIceCandidate(sendTo);
-    await pc.createOffer(options);
-    await pc.setLocalDescription(pc.localDescription);
-    send('client-offer', pc.localDescription, sendTo);
-}
-
-async function createAnswer(sendTo, data) {
-    if (!pc) {
-        await getConn();
-    }
-    if (!localStream) {
-        await getCam();
-    }
-
-    await sendIceCandidate(sendTo);
-    await pc.setRemoteDescription(data);
-    await pc.createAnswer();
-    await pc.setLocalDescription(pc.localDescription);
-    send('client-answer', pc.localDescription, sendTo);
-}
-
-function sendIceCandidate(sendTo) {
-    pc.onicecandidate = e => {
-        if (e.candidate !== null) {
-            //send Ice Candidate to other client
-            send('client-candidate', e.candidate, sendTo);
-        }
-    }
-
-    pc.onaddstream = e => {
-        $('#modal').css('display', 'block');
-        $('#profile').addClass('hidden');
-        remoteVideo.srcObject = e.streams;
-    }
-}
-
-function hangup() {
-    send('client-hangup', null, sendTo);
-    pc.close();
-    pc = null
-}
-
-$('#callBtn').on('click', () => {
-    getCam();
-    send('is-client-ready', null, sendTo);
+$('#callBtn').on('click', async () => {
+    isCreator = true;
+    localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+    });
+    localVideo.srcObject = localStream;
+    socketEmit('call-request', null, sendTo);
     $('#modal').css('display', 'block');
 });
 
 
-$('#hangupBtn').on('click', () => {
-    $('#modal').css('display', 'none');
-    hangup();
-    location.reload(true);
-});
-
-conn.onopen = e => {
-    console.log('connected to websocket');
+async function getUserMedia() {
+    localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+    });
+    localVideo.srcObject = localStream;
+    $('#modal').css('display', 'block');
 }
 
-conn.onmessage = async e => {
-    let message = JSON.parse(e.data);
-    let by = message.by;
-    let to = message.sendTo;
-    let data = message.data;
-    let type = message.type;
-    let profileImage = message.profileImage;
-    let username = message.username;
-    let ts = message.ts;
-    $('#username').text(username);
-    $('#profileImage').attr('src', profileImage);
 
-    switch (type) {
-        case 'client-candidate':
-            if (pc.localDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(data));
-            }
-            break;
-        case 'is-client-ready':
-            if (!pc) {
-                await getConn();
-            }
-
-            if (pc.iceConnectionState === "connected") {
-                send('client-already-oncall', null, by);
-            } else {
-                //display popup
-                displayCall();
-                if (window.location.href.indexOf(username) > -1) {
-                    answerBtn.on('click', () => {
-                        callBox.addClass('hidden');
-                        $('.wrapper').removeClass('glass');
-                        send('client-is-ready', null, sendTo);
-
-                    });
-                } else {
-                    answerBtn.on('click', () => {
-                        callBox.addClass('hidden');
-                        redirectToCall(username, by);
-                    });
-                }
-
-                declineBtn.on('click', () => {
-                    send('client-rejected', null, sendTo);
-                    location.reload(true);
-                })
-            }
-            break;
-        case 'client-answer':
-            if (pc.localDescription) {
-                let sessionDescription = new RTCSessionDescription(data);
-                await pc.setRemoteDescription(sessionDescription);
-                $('#callTimer').timer({ format: '%m:%S' });
-            }
-            break;
-        case 'client-offer':
-            let sessionDescription = new RTCSessionDescription(data);
-            createAnswer(sendTo, sessionDescription);
-            $('#callTimer').timer({ format: '%m:%S' });
-            break;
-        case 'client-is-ready':
-            createOffer(sendTo);
-            break;
-        case 'client-already-oncall':
-            //display popup
-            displayAlert(username, profileImage, 'is on another call');
-            setTimeout('window.location.reload(true)', 2000);
-            break;
-
-        case 'client-rejected':
-            displayAlert(username, profileImage, 'is busy');
-            setTimeout('window.location.reload(true)', 2000);
-            break;
-
-        case 'client-hangup':
-            //display popup
-            displayAlert(username, profileImage, 'Disconnected the call');
-            setTimeout('window.location.reload(true)', 2000);
-            break;
-
-        case 'text':
-            add_messages({ me: false, content: data, ts: ts, avatar_url: profileImage });
-            changeChatMessage(by, data, ts);
-            if ($('#chat-user-' + by).length === 0) addChatMessage(message_ts, message);
-            break;
-    }
-}
-
-function send(type, data, sendTo) {
-    conn.send(JSON.stringify({
+function socketEmit(type, data, sendTo) {
+    chatWebSocket.send(JSON.stringify({
         sendTo: sendTo,
         type: type,
         data: data,
@@ -237,9 +64,169 @@ function send(type, data, sendTo) {
     }));
 }
 
-function displayCall() {
+chatWebSocket.onopen = openChatWebSocket;
+chatWebSocket.onmessage = messageChatWebSocket;
+chatWebSocket.onerror = errorChatWebSocket;
+chatWebSocket.onclose = closeChatWebSocket;
+
+
+async function openChatWebSocket(e) {
+    console.log('Chat WebSocket connected: ');
+}
+
+async function messageChatWebSocket(e) {
+    console.log("Message:")
+
+    let message = JSON.parse(e.data);
+
+    switch (message.type) {
+        case 'offer':
+            if (!isCreator) {
+
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: true,
+                });
+                localVideo.srcObject = localStream;
+
+                localStream.getTracks().forEach(track => {
+                    rtcPeerConnection.addTrack(track, localStream);
+                });
+                await rtcPeerConnection.setRemoteDescription(
+                    new RTCSessionDescription(message.data)
+                );
+                const sessionDescription = await rtcPeerConnection.createAnswer();
+                await rtcPeerConnection.setLocalDescription(sessionDescription);
+                socketEmit('answer', sessionDescription, sendTo)
+            }
+            break;
+        case 'candidate':
+            console.log('candidate');
+            if (rtcPeerConnection.localDescription) {
+                await rtcPeerConnection.addIceCandidate(new RTCIceCandidate(message.data));
+            }
+            break;
+        case 'answer':
+            console.log('answer');
+            rtcPeerConnection.setRemoteDescription(
+                new RTCSessionDescription(message.data)
+            );
+        case 'call-hangup':
+            console.log('hangup');
+            // rtcPeerConnection.close();
+            // rtcPeerConnection = null
+            // displayAlert(message.username, message.profileImage, 'Disconnected the call');
+            //setTimeout('window.location.reload(true)', 2000);
+            break;
+        case 'oncall':
+            console.log('oncall');
+            displayAlert(message.username, message.profileImage, 'is on another call');
+            // setTimeout('window.location.reload(true)', 2000);
+            break;
+        case 'ready':
+            if (isCreator) {
+                rtcPeerConnection = new RTCPeerConnection(rtcConfig);
+                rtcPeerConnection.onicecandidate = onIceCandidate;
+                rtcPeerConnection.ontrack = onTrack;
+                localStream.getTracks().forEach(track => {
+                    rtcPeerConnection.addTrack(track, localStream);
+                });
+                const sessionDescription = await rtcPeerConnection.createOffer();
+                await rtcPeerConnection.setLocalDescription(sessionDescription);
+
+                socketEmit('offer', sessionDescription, sendTo);
+            }
+            break;
+        case 'call-request':
+            console.log('call-request');
+            displayCall(message.username, message.profileImage);
+            if (window.location.href.indexOf(message.username) > -1) {
+                answerBtn.on('click', () => {
+                    getUserMedia();
+                    rtcPeerConnection = new RTCPeerConnection(rtcConfig);
+                    rtcPeerConnection.onicecandidate = onIceCandidate;
+                    rtcPeerConnection.ontrack = onTrack;
+
+                    callBox.addClass('hidden');
+                    $('.wrapper').removeClass('glass');
+                    socketEmit('ready', null, sendTo);
+                });
+
+            } else {
+                answerBtn.on('click', () => {
+                    callBox.addClass('hidden');
+                });
+            }
+
+            declineBtn.on('click', () => {
+                socketEmit('call-request-rejected', null, sendTo);
+                hideCall();
+            })
+            break;
+
+        case 'call-request-rejected':
+            displayAlert(message.username, message.profileImage, 'is busy');
+            hangup()
+            // setTimeout('window.location.reload(true)', 2000);
+            break;
+
+        case 'call-request-oncall':
+            displayAlert(message.username, message.profileImage, 'is on another call');
+            hangup()
+            // setTimeout('window.location.reload(true)', 2000);
+            break;
+        case 'text':
+            add_messages({ me: false, content: message.data, ts: message.ts, avatar_url: message.profileImage });
+            changeChatMessage(message.by, message.data, message.ts);
+            if ($('#chat-user-' + by).length === 0) addChatMessage(message.ts, message.data);
+            break;
+
+    }
+
+}
+
+function errorChatWebSocket(e) {
+    console.log("Error:")
+}
+
+function closeChatWebSocket(e) {
+    console.log("Close:")
+}
+
+function onIceCandidate(event) {
+    console.log(event)
+    if (event.candidate) {
+        console.log('sending ice candidate');
+        socketEmit('candidate', event.candidate, sendTo);
+    }
+}
+
+function onTrack(event) {
+    console.log('ontrack');
+    console.log(event)
+    remoteStream = event.streams[0];
+    remoteVideo.srcObject = remoteStream;
+}
+
+
+function hangup() {
+    localStream.getTracks().forEach(track => track.stop());
+}
+
+
+function displayCall(username, profileImage) {
+    callBox.find('#username').text(username);
+    callBox.find('#profileImage').attr('src', profileImage);
+
     callBox.removeClass('hidden');
     $('.wrapper').addClass('glass');
+}
+
+function hideCall() {
+    callBox.addClass('hidden');
+    $('.wrapper').removeClass('glass');
+    $('#modal').css('display', 'none');
+
 }
 
 function displayAlert(username, profileImage, message) {
@@ -249,8 +236,23 @@ function displayAlert(username, profileImage, message) {
 
     alertBox.removeClass('hidden');
     $('.wrapper').addClass('glass');
-    $('#modal').css('display', 'block');
-    $('#profile').removeClass('hidden');
+    $('#modal').css('display', 'none');
+
+    // Agrega un evento de click al botón de cerrar
+    $('#closeBtn').on('click', () => {
+        hideAlert();
+    });
+
+    // Ocultar el mensaje después de 5 segundos
+    setTimeout(() => {
+        hideAlert();
+    }, 5000);
+}
+
+function hideAlert() {
+    alertBox.addClass('hidden');
+    $('.wrapper').removeClass('glass');
+    $('#modal').css('display', 'none');
 }
 
 function redirectToCall(username, sendTo) {
@@ -264,8 +266,8 @@ function redirectToCall(username, sendTo) {
 if (sessionStorage.getItem('redirect')) {
     sendTo = sessionStorage.getItem('sendTo');
     let waitForWs = setInterval(() => {
-        if (conn.readyState === 1) {
-            send('client-is-ready', null, sendTo);
+        if (rtcPeerConnection.readyState === 1) {
+            socketEmit('client-is-ready', null, sendTo);
             clearInterval(waitForWs);
         }
     }, 500);
@@ -346,7 +348,7 @@ if (document.querySelector('.messages-content')) {
     function sendMessage() {
         let message = $('#message').val();
         if (message !== '' && message.trim().length > 0) {
-            send('text', message, sendTo);
+            socketEmit('text', message, sendTo);
             $('#message').val('');
             let message_ts = Date.now() / 1000;
             add_messages({ me: true, content: message, ts: message_ts, avatar_url: 'assets/images/defaultImage.png' });

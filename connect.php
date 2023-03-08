@@ -58,7 +58,7 @@ if (isset($_GET['username']) && !empty($_GET['username'])) {
     <!-- Jquery -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.3/jquery.min.js" integrity="sha512-STof4xm1wgkfm7heWqFJVn58Hm3EtS31XFaagaa8VMReCXAkQnJZ+jEy8PCC/iT18dFy95WcExNHFTqLyp72eQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <Script type="text/javascript">
-        const conn = new WebSocket('<?= WS_HOST ?>/?token=<?= $userObj->usr_session_id ?>')
+        const chatWebSocket = new WebSocket('<?= WS_HOST ?>/?token=<?= $userObj->usr_session_id ?>')
     </Script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simplebar@latest/dist/simplebar.css" />
     <script src="https://cdn.jsdelivr.net/npm/simplebar@latest/dist/simplebar.min.js"></script>
@@ -78,13 +78,18 @@ if (isset($_GET['username']) && !empty($_GET['username'])) {
                     <img id="alertImage" class="w-full h-auto" src="">
                 </div>
                 <div class="flex flex-col">
-                    <div id="alertName" class="mx-2 font-500">
-                    </div>
+                    <div id="alertName" class="mx-2 font-500"></div>
                     <div class="animate-pulse mx-2 text-xs font-200 relative flex">
                         <span id="alertMessage" class="flex"></span>
                     </div>
                 </div>
             </div>
+            <!-- Agrega el botón de cerrar -->
+            <button id="closeBtn" class="p-2 text-gray-500 hover:text-gray-800 focus:outline-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 1 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 1 0 1.414-1.414L11.414 10z" clip-rule="evenodd" />
+                </svg>
+            </button>
         </div>
     </div>
     <!-- CallPopup -->

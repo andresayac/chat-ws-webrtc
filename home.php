@@ -43,7 +43,7 @@ $userObj->updateSession();
     <!-- Jquery -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.3/jquery.min.js" integrity="sha512-STof4xm1wgkfm7heWqFJVn58Hm3EtS31XFaagaa8VMReCXAkQnJZ+jEy8PCC/iT18dFy95WcExNHFTqLyp72eQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script type="text/javascript">
-        const conn = new WebSocket('<?= WS_HOST ?>/?token=<?= $userObj->usr_session_id ?>')
+        const chatWebSocket = new WebSocket('<?= WS_HOST ?>/?token=<?= $userObj->usr_session_id ?>')
     </script>
 </head>
 
